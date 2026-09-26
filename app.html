@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TankMath - honest hot water math</title>
+<style>
+  :root { --bg:#100d14; --card:#1c1622; --line:#332640; --ink:#ece4f5; --dim:#a794bd; --acc:#c98ef0; }
+  * { box-sizing:border-box; margin:0; }
+  body { background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:32px 18px 64px; }
+  .wrap { max-width:1060px; margin:0 auto; }
+  h1 { font-size:26px; letter-spacing:.5px; }
+  h1 span { color:var(--acc); }
+  .home { float:right; color:var(--dim); text-decoration:none; font-size:13px; margin-top:8px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:22px; margin-top:20px; }
+  .card h2 { font-size:15px; color:var(--dim); font-weight:600; text-transform:uppercase; letter-spacing:1px; margin-bottom:14px; }
+  .row { display:flex; gap:12px; flex-wrap:wrap; }
+  .row > div { flex:1; min-width:140px; }
+  label { display:block; font-size:12px; color:var(--dim); margin-bottom:4px; }
+  input, select { width:100%; background:#150f1c; border:1px solid var(--line); color:var(--ink); border-radius:8px; padding:9px 10px; font:inherit; }
+  button { background:var(--acc); color:#26103a; border:0; border-radius:9px; padding:10px 20px; font:600 15px system-ui; cursor:pointer; }
+  button.ghost { background:#150f1c; color:var(--acc); border:1px solid var(--line); padding:8px 14px; font-size:13px; }
+  .err { color:#ff8a80; font-size:14px; margin-top:10px; min-height:20px; }
+  .note { color:var(--dim); font-size:12.5px; margin-top:10px; }
+  .verdict { background:#1c1226; border:1px solid #4a2e63; border-radius:12px; padding:18px 20px; margin-top:20px; font-size:16px; line-height:1.6; display:none; }
+  .verdict b { color:var(--acc); }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-top:20px; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; }
+  .stat .v { font-size:22px; font-weight:700; }
+  .stat .k { color:var(--dim); font-size:12px; margin-top:4px; }
+  .faces { display:flex; gap:10px; margin-top:16px; flex-wrap:wrap; }
+  .face { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 18px; text-align:center; font-size:14px; }
+  .face.hot { border-color:#4a2e63; color:var(--acc); }
+  .face.cold { color:var(--dim); }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="home" href="index.html">home</a>
+  <h1>Tank<span>Math</span></h1>
+
+  <div class="card">
+    <h2>The tank</h2>
+    <div class="row">
+      <div><label>Tank size (litres)</label><input id="tank" type="number" value="150" min="30" max="500" step="10"></div>
+      <div><label>Fuel</label><select id="fuel"></select></div>
+      <div><label>Incoming water (C)</label><input id="inlet" type="number" value="15" min="2" max="30"></div>
+    </div>
+    <div class="note">Incoming water runs 5-10 C in winter, 15-20 in summer. Winter is when the third shower dies.</div>
+  </div>
+
+  <div class="card">
+    <h2>The household</h2>
+    <div class="row">
+      <div><label>Shower flow (L/min)</label><input id="flow" type="number" value="9" min="4" max="20" step="0.5"></div>
+      <div><label>Shower length (min)</label><input id="len" type="number" value="8" min="2" max="30"></div>
+      <div><label>People, back to back</label><input id="people" type="number" value="3" min="1" max="8"></div>
+    </div>
+    <div style="margin-top:16px; display:flex; gap:10px; flex-wrap:wrap;">
+      <button id="go">Run the morning rush</button>
+      <button class="ghost" id="preset1">family of 4, 120L electric</button>
+      <button class="ghost" id="preset2">couple, 200L gas</button>
+    </div>
+    <div class="err" id="err"></div>
+    <div class="note">Only ~70% of a tank is truly hot - the rest stratifies. A 40C shower from a 60C tank drinks roughly 56% hot water when the inlet is 15 C.</div>
+  </div>
+
+  <div class="verdict" id="verdict"></div>
+
+  <div class="stats hidden" id="statsWrap">
+    <div class="stat"><div class="v" id="sUsable"></div><div class="k">truly hot water</div></div>
+    <div class="stat"><div class="v" id="sDraw"></div><div class="k">hot water per shower minute</div></div>
+    <div class="stat"><div class="v" id="sRun"></div><div class="k">one tank runs a shower</div></div>
+    <div class="stat"><div class="v" id="sServed"></div><div class="k">full showers back to back</div></div>
+    <div class="stat"><div class="v" id="sRec1"></div><div class="k">recovery after one shower</div></div>
+    <div class="stat"><div class="v" id="sRecF"></div><div class="k">full reheat from cold</div></div>
+  </div>
+
+  <div class="faces hidden" id="faces"></div>
+
+  <div class="card">
+    <h2>Why "40 gallons" is not 40 showers</h2>
+    <p style="font-size:14px;">
+      Tanks are sold by volume, but <b style="color:var(--acc)">only about 70% stays truly hot</b> - the bottom layer mixes cold the moment you draw.
+      A shower is a blend: at 40 C from a 60 C tank with 15 C inlet water, <b style="color:var(--acc)">56% of every litre comes from the tank</b>.
+      Recovery is the fuel's whole story: gas reheats roughly <b style="color:var(--acc)">2.6x faster than a standard electric element</b>, which is why the same size tank feels bigger on gas.
+      The cheapest upgrade is not a bigger tank - it is a smaller flow head and one less minute.
+    </p>
+  </div>
+</div>
+<script src="engine.js"></script>
+<script>
+(function(){
+  var sel = document.getElementById('fuel');
+  Object.keys(TankMathEngine.FUELS).forEach(function(k){
+    var o = document.createElement('option');
+    o.value = k; o.textContent = TankMathEngine.FUELS[k].label;
+    sel.appendChild(o);
+  });
+
+  document.getElementById('preset1').addEventListener('click', function(){
+    document.getElementById('tank').value = 120;
+    document.getElementById('fuel').value = 'electric';
+    document.getElementById('inlet').value = 8;
+    document.getElementById('flow').value = 10;
+    document.getElementById('len').value = 10;
+    document.getElementById('people').value = 4;
+  });
+  document.getElementById('preset2').addEventListener('click', function(){
+    document.getElementById('tank').value = 200;
+    document.getElementById('fuel').value = 'gas';
+    document.getElementById('inlet').value = 15;
+    document.getElementById('flow').value = 9;
+    document.getElementById('len').value = 8;
+    document.getElementById('people').value = 2;
+  });
+
+  document.getElementById('go').addEventListener('click', function(){
+    var errEl = document.getElementById('err'); errEl.textContent = '';
+    var r;
+    try {
+      r = TankMathEngine.analyze({
+        tankL: document.getElementById('tank').value,
+        fuel: document.getElementById('fuel').value,
+        inletC: document.getElementById('inlet').value,
+        flowLpm: document.getElementById('flow').value,
+        showerMin: document.getElementById('len').value,
+        people: document.getElementById('people').value
+      });
+    } catch(e){ errEl.textContent = e.message; return; }
+    document.getElementById('sUsable').textContent = r.usableL + ' L';
+    document.getElementById('sDraw').textContent = r.hotDrawLpm + ' L/min';
+    document.getElementById('sRun').textContent = '~' + r.showerMinutes + ' min';
+    document.getElementById('sServed').textContent = r.served + ' of ' + r.people;
+    document.getElementById('sRec1').textContent = '~' + r.recOneMin + ' min';
+    document.getElementById('sRecF').textContent = '~' + r.recFullMin + ' min';
+    document.getElementById('statsWrap').classList.remove('hidden');
+
+    var v = document.getElementById('verdict');
+    v.innerHTML = r.verdict.replace(/(~?\d[\d.]* (?:L|min|L\/min)|comfortable|one cold shower|morning mutiny|\d+ of \d+)/g, '<b>$1</b>');
+    v.style.display = 'block';
+
+    var faces = document.getElementById('faces');
+    faces.innerHTML = '';
+    r.rushDetail.forEach(function(d){
+      var div = document.createElement('div');
+      div.className = 'face ' + (d.ok ? 'hot' : 'cold');
+      div.textContent = 'Person ' + d.person + ': ' + (d.ok ? 'hot' : 'cold');
+      faces.appendChild(div);
+    });
+    faces.classList.remove('hidden');
+  });
+})();
+</script>
+</body>
+</html>
